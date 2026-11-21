@@ -428,7 +428,7 @@ window.LESSONS = [
         name: "Đại từ nghi vấn dùng linh hoạt (1)", pattern: "疑问词 + … 就 + … + cùng 疑问词",
         explain: "Hai đại từ nghi vấn giống nhau chỉ cùng một đối tượng: 你去哪儿我就去哪儿 (bạn đi đâu tôi đi đó), 你想吃什么就吃什么 (muốn ăn gì thì ăn nấy).",
         examples: ["你去哪儿我就去哪儿。", "谁先到，谁就买票。"],
-        tasks: [{ vi: "Nói với bạn: bạn muốn mua gì thì mua nấy.", re: "(什么|哪儿|谁|怎么).+就.+(什么|哪儿|谁|怎么)", sample: "你想买什么就买什么。" }]
+        tasks: [{ vi: "Nói với bạn: bạn muốn mua gì thì mua nấy.", re: "(什么|哪儿|谁|怎么).*就.*(什么|哪儿|谁|怎么)", sample: "你想买什么就买什么。" }]
       }
     ],
     sentences: [
