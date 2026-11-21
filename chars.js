@@ -164,6 +164,7 @@ window.CHARS = {
 
   // Bài 3
   "便": ["亻", "tiện", "亻 người + 更"],
+  "方": ["方", "phương", "chữ độc thể — hình cái cày / phương hướng"],
   "宜": ["宀", "nghi", "宀 mái nhà + 且"],
   "贵": ["贝", "quý", "中 (biến thể) + 一 + 贝 tiền"],
   "颜": ["页", "nhan", "彦 + 页 đầu → khuôn mặt"],

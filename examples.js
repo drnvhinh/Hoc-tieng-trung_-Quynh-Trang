@@ -29,7 +29,7 @@ window.EXAMPLES = {
   "爬山": ["周末我们去爬山。", "Zhōumò wǒmen qù páshān.", "Cuối tuần chúng tôi đi leo núi."],
   "节目": ["这个节目很有意思。", "Zhège jiémù hěn yǒu yìsi.", "Chương trình này rất thú vị."],
   "打扫": ["我每天打扫房间。", "Wǒ měitiān dǎsǎo fángjiān.", "Ngày nào tôi cũng dọn phòng."],
-  "洗澡": ["我想先洗个澡。", "Wǒ xiǎng xiān xǐ ge zǎo.", "Tôi muốn tắm cái đã."],
+  "洗澡": ["我每天晚上洗澡。", "Wǒ měitiān wǎnshang xǐzǎo.", "Tối nào tôi cũng tắm."],
   "一般": ["我一般七点起床。", "Wǒ yìbān qī diǎn qǐchuáng.", "Tôi thường dậy lúc 7 giờ."],
   "有时候": ["有时候我自己做饭。", "Yǒushíhou wǒ zìjǐ zuò fàn.", "Có lúc tôi tự nấu cơm."],
   "附近": ["附近有银行吗？", "Fùjìn yǒu yínháng ma?", "Gần đây có ngân hàng không?"],
