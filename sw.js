@@ -1,5 +1,5 @@
 /* Bộ nhớ đệm để mở được khi mạng yếu. Đổi VERSION mỗi khi cập nhật nội dung. */
-const VERSION = 'hsk3-v3';
+const VERSION = 'hsk3-v4';
 /* Liệt kê cả 2 kiểu vị trí file (trong thư mục con / ở thư mục gốc); file nào không có thì bỏ qua. */
 const FILES = ['./', 'index.html', 'manifest.json', 'icon.svg',
   'css/style.css', 'js/app.js', 'data/lessons.js', 'data/examples.js', 'data/chars.js',

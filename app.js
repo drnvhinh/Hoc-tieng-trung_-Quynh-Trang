@@ -16,6 +16,11 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem('hsk3:' + k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem('hsk3:' + k, JSON.stringify(v)); } catch (e) { /* bộ nhớ bị chặn: bỏ qua */ } }
 };
+/* Khi nội dung bài học thay đổi cấu trúc (DATA_VERSION), xóa tiến độ cũ để không lệch mục học */
+if (store.get('dataVer', 1) !== (window.DATA_VERSION || 1)) {
+  ['srs', 'started', 'gseen'].forEach(k => { try { localStorage.removeItem('hsk3:' + k); } catch (e) { /* bỏ qua */ } });
+  store.set('dataVer', window.DATA_VERSION || 1);
+}
 let srs = store.get('srs', {});          // id -> { b: hộp, d: ngày đến hạn, n: số lần, l: lần cuối }
 let started = store.get('started', []); // các bài đã bắt đầu học
 let gseen = store.get('gseen', {});     // thẻ ngữ pháp đã xem
@@ -33,7 +38,10 @@ const PUNCT = /^[，。？！、：；,.?!“”"…]+$/;
 LESSONS.forEach(L => {
   const list = BY_LESSON[L.id] = [];
   const add = it => { it.lesson = L.id; ITEMS[it.id] = it; list.push(it); };
-  L.words.forEach((w, i) => add({ id: `w${L.id}-${i}`, type: 'word', h: w[0], p: w[1], v: w[2], hv: w[3] || '', ex: (window.EXAMPLES || {})[w[0]] || null }));
+  L.words.forEach((w, i) => add({
+    id: `w${L.id}-${i}`, type: 'word', h: w[0], p: w[1], v: w[2], hv: w[3] || '',
+    ex: w[4] ? [w[4], w[5] || '', w[6] || ''] : ((window.EXAMPLES || {})[w[0]] || null)
+  }));
   L.sentences.forEach((s, i) => {
     const tokens = s[0].split(/\s+/).filter(Boolean);
     add({ id: `s${L.id}-${i}`, type: 'sent', tokens, zh: tokens.join(''), py: s[1], vi: s[2] });
@@ -657,6 +665,7 @@ function pageHome() {
   app.innerHTML = `
     ${banner}
     <section class="card hero">
+      <p style="margin:0 0 4px;opacity:.9">${new Date().getHours() < 11 ? 'Chào buổi sáng' : new Date().getHours() < 18 ? 'Chào buổi chiều' : 'Chào buổi tối'}, Quỳnh Trang! 加油！</p>
       <div class="row between"><h1 style="margin:0">Buổi học hôm nay</h1>
         <div class="seg" id="mins">${[15, 20, 30].map(m => `<button data-m="${m}" class="${settings.minutes === m ? 'on' : ''}">${m}′</button>`).join('')}</div>
       </div>
@@ -828,7 +837,7 @@ function buildTest(ids) {
     Q.push({ t: 'radical', it, c, ans, label: 'Chữ này thuộc bộ thủ nào?', opts: opts(ans, radPool, x => x.r), f: x => `${x.r}  ${RAD[x.r][0]} — ${RAD[x.r][1]}` });
   });
   take(words, 2).forEach(it => Q.push({ t: 'pinyin', it, label: 'Chọn pinyin đúng', opts: opts(it, words, x => x.p), f: x => x.p }));
-  take(words.filter(w => w.ex), 4).forEach(it => Q.push({ t: 'fill', it, label: 'Chọn từ điền vào chỗ trống', opts: opts(it, words, x => x.h), f: x => x.h, zh: true }));
+  take(words.filter(w => w.ex && w.ex[0].includes(w.h)), 4).forEach(it => Q.push({ t: 'fill', it, label: 'Chọn từ điền vào chỗ trống', opts: opts(it, words, x => x.h), f: x => x.h, zh: true }));
   take(sents, 2).forEach(it => Q.push({ t: 'listenSent', it, label: 'Nghe câu và chọn nghĩa đúng', opts: opts(it, sents, x => x.vi), f: x => x.vi }));
   take(sents, 2).forEach(it => Q.push({ t: 'order', it, label: 'Sắp xếp thành câu đúng' }));
   return shuffle(Q);
@@ -974,7 +983,7 @@ function pageSettings() {
     </div>
     <div class="card">
       <h3>ℹ️ Về nội dung</h3>
-      <p class="small">Các bài được soạn theo chủ đề và ngữ pháp trọng tâm của HSK 3 (từ vựng, câu ví dụ, câu mẫu là nội dung tự soạn, không sao chép giáo trình). Có thể thêm/sửa bài trong file <code>data/lessons.js</code> và <code>data/examples.js</code> cho khớp với từng bài trong sách.</p>
+      <p class="small">20 bài bám theo mục lục giáo trình HSK标准教程 3 (tên bài, từ mới, điểm ngữ pháp). Câu ví dụ, câu mẫu và hỏi đáp là nội dung tự soạn để luyện nói, không chép bài khóa — bài khóa học trong sách. Có thể thêm/sửa bài trong file <code>data/lessons.js</code> và <code>data/examples.js</code> cho khớp với từng bài trong sách.</p>
       <p class="small muted">Nhận giọng nói hoạt động tốt nhất trên Chrome (Android, máy tính). Trên iPhone dùng Safari, nếu micro không hoạt động thì gõ bằng bàn phím tiếng Trung.</p>
       <button class="btn bad" id="reset">Xóa toàn bộ tiến độ</button>
     </div>`;

@@ -54,6 +54,9 @@ button { font: inherit; }
   padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--line);
 }
 .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; color: var(--text); text-decoration: none; }
+.brand-text { display: flex; flex-direction: column; line-height: 1.15; }
+.brand-text b { font-size: 1rem; }
+.brand-text small { font-size: .72rem; font-weight: 500; color: var(--muted); }
 .brand-mark {
   display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 8px;
   background: var(--accent); color: #fff; font-family: var(--zh); font-size: 18px;
