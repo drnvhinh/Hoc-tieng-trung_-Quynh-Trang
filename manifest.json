@@ -1,0 +1,14 @@
+{
+  "name": "Học HSK 3",
+  "short_name": "HSK 3",
+  "description": "Luyện tiếng Trung HSK 3 mỗi ngày: từ vựng, phản xạ nói, đặt câu, kiểm tra.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#faf7f2",
+  "theme_color": "#b4262f",
+  "lang": "vi",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
