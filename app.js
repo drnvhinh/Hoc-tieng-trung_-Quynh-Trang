@@ -25,11 +25,34 @@ let srs = store.get('srs', {});          // id -> { b: hộp, d: ngày đến h�
 let started = store.get('started', []); // các bài đã bắt đầu học
 let gseen = store.get('gseen', {});     // thẻ ngữ pháp đã xem
 let log = store.get('log', {});         // ngày -> { s: giây, n: số mục }
-const settings = Object.assign({ minutes: 20, rate: 0.85, pinyin: true, remind: '20:00' }, store.get('settings', {}));
+const settings = Object.assign({ minutes: 20, rate: 0.85, pinyin: true, remind: '20:00', reflex: 'auto' }, store.get('settings', {}));
+/* Thời gian phản xạ nói (giây). 'auto' = theo độ dài câu (12–30 giây), 0 = không đếm giờ */
+function reflexLimit(zh) {
+  if (settings.reflex === 0) return 0;
+  if (typeof settings.reflex === 'number') return settings.reflex;
+  return Math.max(12, Math.min(30, Math.round(String(zh).length * 1.2) + 6));
+}
+const reflexLabel = () => settings.reflex === 'auto' ? 'Tự động' : settings.reflex === 0 ? 'Tắt' : settings.reflex + ' giây';
 const saveSettings = () => store.set('settings', settings);
 
 const today = () => Math.floor((Date.now() - new Date().getTimezoneOffset() * 60000) / 86400000);
 const dayLabel = d => { const dt = new Date(d * 86400000); return ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][dt.getUTCDay()]; };
+
+/* ---------- ghép ngữ pháp chi tiết + mở rộng ngoài sách (data/grammar.js) ---------- */
+(function mergeGrammar() {
+  const P = window.GRAMMAR_PLUS || {};
+  LESSONS.forEach(L => {
+    L.grammar.forEach((g, gi) => {
+      const p = P[`${L.id}-${gi}`];
+      if (!p) return;
+      g.form = p.form || g.form;
+      g.notes = p.notes || g.notes;
+      g.examples = [...g.examples, ...(p.examples || [])];
+    });
+    // Điểm mở rộng thêm vào CUỐI danh sách để không làm lệch mã các mục đã học
+    ((P.extra || {})[L.id] || []).forEach(x => L.grammar.push(Object.assign({ extra: true, tasks: [], examples: [] }, x)));
+  });
+})();
 
 /* ---------- kho mục học ---------- */
 const ITEMS = {};
@@ -143,7 +166,7 @@ function answerBox(onSubmit, placeholder = '…hoặc gõ câu trả lời bằn
          <div class="heard muted small">Bấm micro rồi nói tiếng Trung</div>`
       : `<div class="tip">Trình duyệt này chưa nhận được giọng nói (nên dùng Chrome trên Android/máy tính). Hãy <b>nói to</b> câu trả lời, rồi gõ lại hoặc bấm “Xem đáp án”.</div>`}
     <div class="row" style="margin-top:10px;flex-wrap:nowrap">
-      <input class="txt" placeholder="${esc(placeholder)}" autocomplete="off" lang="zh-CN">
+      <input class="txt" placeholder="${esc(placeholder)}" autocomplete="off">
       <button class="btn" type="button" data-act="typed">OK</button>
     </div>`;
   const mic = $('.mic', el), heard = $('.heard', el), input = $('input', el);
@@ -400,6 +423,53 @@ function charBlock(word) {
   return rows ? `<div class="chars"><div class="small muted">Phân tích theo bộ thủ</div>${rows}</div>` : '';
 }
 
+/* Thẻ ngữ pháp đầy đủ: cấu trúc, giải thích, các dạng câu, ví dụ (có pinyin, nghĩa), lưu ý */
+function grammarHtml(g) {
+  const ex = x => Array.isArray(x) ? x : [x, '', ''];
+  return `${g.extra ? '<span class="badge">Mở rộng ngoài sách</span>' : ''}
+    <div class="pattern">${esc(g.pattern)}</div>
+    <p>${esc(g.explain)}</p>
+    ${g.form && g.form.length ? `<div class="gform">${g.form.map(([k, v]) => `<div><b>${esc(k)}</b><span class="zh">${esc(v)}</span></div>`).join('')}</div>` : ''}
+    <div class="small muted" style="margin-top:10px">Ví dụ</div>
+    ${g.examples.map(x => {
+      const [zh, py, vi] = ex(x);
+      return `<div class="sent"><div class="row between" style="flex-wrap:nowrap"><span class="zh" style="font-size:1.15rem">${esc(zh)}</span><span style="flex:none">${sayBtn(zh)}</span></div>
+        ${py ? `<div class="py-line">${esc(py)}</div>` : ''}${vi ? `<div class="vi-line">${esc(vi)}</div>` : ''}</div>`;
+    }).join('')}
+    ${g.notes && g.notes.length ? `<div class="tip" style="margin-top:10px"><b>⚠ Lưu ý, lỗi hay gặp</b><ul>${g.notes.map(n => `<li>${esc(n)}</li>`).join('')}</ul></div>` : ''}`;
+}
+
+/* ---------- kiểm tra từ vựng trong câu tự đặt ---------- */
+const wordParts = h => String(h).split(/…+|\.{2,}/).map(s => s.replace(/[()（）]/g, '').trim()).filter(Boolean);
+/* Tìm các từ đã học (bài 1 → bài n) xuất hiện trong câu; ưu tiên từ dài để 一样 không bị đếm thành 一 */
+function vocabFound(said, upTo) {
+  const s = String(said).replace(/\s+/g, '');
+  const used = new Array(s.length).fill(false);
+  const found = [];
+  const list = LESSONS.filter(L => L.id <= upTo)
+    .flatMap(L => L.words.flatMap(w => wordParts(w[0]).map(p => ({ p, h: w[0], py: w[1], v: w[2], L: L.id }))))
+    .sort((a, b) => b.p.length - a.p.length);
+  for (const w of list) {
+    let i = s.indexOf(w.p);
+    while (i >= 0) {
+      if (!used.slice(i, i + w.p.length).some(Boolean)) {
+        for (let k = i; k < i + w.p.length; k++) used[k] = true;
+        if (!found.some(f => f.p === w.p)) found.push(w);
+      }
+      i = s.indexOf(w.p, i + 1);
+    }
+  }
+  return found;
+}
+/* Chọn 2 từ mới của bài để gợi ý dùng trong câu */
+function pickTargets(lessonId, sample) {
+  const words = lessonById(lessonId).words.filter(w => wordParts(w[0]).length === 1);
+  const fit = shuffle(words.filter(w => sample && sample.includes(w[0])));
+  const rest = shuffle(words.filter(w => !(sample && sample.includes(w[0]))));
+  return [...fit, ...rest].slice(0, 2).map(w => ({ p: w[0], py: w[1], v: w[2] }));
+}
+const vocabChips = list => list.map(w => `<span class="vchip" title="${esc(w.py)} — ${esc(w.v)}"><span class="zh">${esc(w.p)}</span> <small>${esc(w.v)}</small></span>`).join(' ');
+
 const RENDER = {
   /* Từ mới: chữ, pinyin, nghĩa, Hán Việt, ví dụ — nghe và đọc theo */
   intro(box, step, done) {
@@ -479,19 +549,29 @@ const RENDER = {
   /* Phản xạ: thấy tiếng Việt → nói ngay tiếng Trung */
   speak(box, step, done) {
     const it = step.it;
-    const LIMIT = Math.max(8, Math.min(16, Math.round(it.zh.length * 0.8)));
+    const LIMIT = reflexLimit(it.zh);
     const t0 = Date.now();
     box.innerHTML = `<div class="body">
-      <p class="muted small">Nói câu này bằng tiếng Trung — cố gắng trong ${LIMIT} giây:</p>
-      <div class="prompt-vi">${esc(it.vi)}</div>
-      <div class="timer"><i id="tm"></i></div>
+      <div class="row between" style="flex-wrap:nowrap">
+        <p class="muted small" style="margin:0">Nói câu này bằng tiếng Trung${LIMIT ? ` — cố gắng trong ${LIMIT} giây` : ''}:</p>
+        <button class="btn icon" id="tmset" type="button" title="Đổi thời gian phản xạ">⏱ ${reflexLabel()}</button>
+      </div>
+      <div class="prompt-vi" style="margin-top:8px">${esc(it.vi)}</div>
+      <div class="timer${LIMIT ? '' : ' hidden'}"><i id="tm"></i></div>
       <div id="ab"></div>
       <div id="rv" class="reveal hidden"></div>
     </div>
     <button class="btn big" id="show">Xem đáp án</button>
     <div id="gr"></div>`;
     const bar = $('#tm', box);
-    requestAnimationFrame(() => { bar.style.transition = `transform ${LIMIT}s linear`; bar.style.transform = 'scaleX(0)'; });
+    if (LIMIT) requestAnimationFrame(() => { bar.style.transition = `transform ${LIMIT}s linear`; bar.style.transform = 'scaleX(0)'; });
+    $('#tmset', box).onclick = () => {
+      // Đổi vòng: Tự động → 10 → 15 → 20 → 30 → 45 → Tắt → Tự động; vẽ lại thẻ với thời gian mới
+      const order = ['auto', 10, 15, 20, 30, 45, 0];
+      settings.reflex = order[(order.indexOf(settings.reflex) + 1) % order.length];
+      saveSettings();
+      RENDER.speak(box, step, done);
+    };
     let shown = false;
     const reveal = said => {
       if (shown) { if (said) $('#rv', box).innerHTML = body(said); return; }
@@ -506,7 +586,7 @@ const RENDER = {
     };
     const body = said => {
       const secs = ((Date.now() - t0) / 1000).toFixed(1);
-      return `${said ? resultHtml(similarity(said, it.zh)) + `<p class="small muted">Thời gian phản xạ: ${secs} giây${secs > LIMIT ? ' — lần sau nhanh hơn nhé!' : ' 👍'}</p>` : ''}
+      return `${said ? resultHtml(similarity(said, it.zh)) + `<p class="small muted">Thời gian phản xạ: ${secs} giây${LIMIT && secs > LIMIT ? ' — lần sau thử nhanh hơn một chút nhé!' : ' 👍'}</p>` : ''}
         <div class="mid-zh diff">${said ? diffHtml(said, it.zh) : esc(it.zh)}</div>
         <div class="py-line">${esc(it.py)}</div>
         <div class="row" style="margin-top:6px">${sayBtn(it.zh, '🔊 Nghe mẫu')}${slowBtn(it.zh)}</div>
@@ -574,8 +654,14 @@ const RENDER = {
     let shown = false;
     const reveal = said => {
       $('#rv', box).classList.remove('hidden');
+      const found = said ? vocabFound(said, it.lesson) : [];
+      const fromLesson = found.filter(w => w.L === it.lesson);
       $('#rv', box).innerHTML = `${said ? `<p>Bạn trả lời: <span class="zh" style="font-size:1.15rem">${esc(said)}</span></p>
-          ${norm(said).length < 4 ? '<div class="result mid">Thử trả lời bằng câu đầy đủ hơn nhé!</div>' : '<div class="result good">Tốt! So sánh với câu mẫu:</div>'}` : ''}
+          ${norm(said).length < 4 ? '<div class="result mid">Thử trả lời bằng câu đầy đủ hơn nhé!</div>' : '<div class="result good">Tốt! So sánh với câu mẫu:</div>'}
+          <div class="result ${fromLesson.length ? 'good' : 'mid'}">Từ vựng: ${fromLesson.length
+            ? `đã dùng ${fromLesson.length} từ mới của bài ✓ ${vocabChips(fromLesson)}`
+            : 'chưa dùng từ mới của bài này — thử trả lời lại có dùng từ mới nhé.'}</div>
+          ${found.length > fromLesson.length ? `<p class="small muted" style="margin:6px 0 2px">Từ đã học khác trong câu:</p><div>${vocabChips(found.filter(w => w.L !== it.lesson))}</div>` : ''}` : ''}
         <p class="small muted" style="margin-bottom:2px">Câu hỏi: <span class="zh">${esc(it.q)}</span> — ${esc(it.qvi)}</p>
         <div class="mid-zh">${esc(it.a)}</div>
         <div class="row">${sayBtn(it.a, '🔊 Nghe câu mẫu')}${slowBtn(it.a)}</div>
@@ -597,10 +683,15 @@ const RENDER = {
   pattern(box, step, done) {
     const it = step.it;
     let re = null; try { re = new RegExp(it.re); } catch (e) { re = null; }
+    const g = lessonById(it.lesson).grammar[it.g];
+    step.targets = step.targets || pickTargets(it.lesson, it.sample);
     box.innerHTML = `<div class="body">
-      <p class="muted small">Đặt câu của riêng bạn — ${esc(it.name)}</p>
+      <p class="muted small">Đặt câu của riêng bạn — ${esc(it.name)}${g && g.extra ? ' · <span class="badge">Mở rộng</span>' : ''}</p>
       <div class="pattern">${esc(it.pattern)}</div>
       <div class="prompt-vi" style="margin-top:8px">${esc(it.vi)}</div>
+      <p class="small" style="margin:10px 0 4px">Dùng thêm ít nhất <b>1 từ mới</b> của bài:</p>
+      <div>${vocabChips(step.targets)}</div>
+      ${g ? `<details style="margin-top:8px"><summary class="small muted">Xem lại ngữ pháp</summary>${grammarHtml(g)}</details>` : ''}
       <div id="ab" style="margin-top:12px"></div>
       <div id="rv" class="reveal hidden"></div>
     </div>
@@ -608,17 +699,30 @@ const RENDER = {
     <div id="gr"></div>`;
     let shown = false;
     const reveal = said => {
-      const ok = said && re ? re.test(said.replace(/\s+/g, '')) : false;
+      const clean = said.replace(/\s+/g, '');
+      const ok = said && re ? re.test(clean) : false;
+      const hanzi = (clean.match(/[一-鿿]/g) || []).length;
+      const hitTargets = step.targets.filter(t => clean.includes(t.p));
+      const found = said ? vocabFound(clean, it.lesson) : [];
+      const fromLesson = found.filter(w => w.L === it.lesson);
+      const vocabOk = hitTargets.length > 0 || fromLesson.length > 0;
+      const longEnough = hanzi >= 5;
       $('#rv', box).classList.remove('hidden');
       $('#rv', box).innerHTML = `${said ? `<p>Câu của bạn: <span class="zh" style="font-size:1.15rem">${esc(said)}</span></p>
-          <div class="result ${ok ? 'good' : 'bad'}">${ok ? 'Đã dùng đúng cấu trúc ✓' : 'Chưa thấy cấu trúc cần dùng — thử lại nhé.'}</div>` : ''}
-        <p class="small muted" style="margin-bottom:2px">Câu gợi ý:</p>
+          <div class="result ${ok ? 'good' : 'bad'}">Ngữ pháp: ${ok ? 'đã dùng đúng cấu trúc ✓' : 'chưa thấy cấu trúc cần dùng ✗'}</div>
+          <div class="result ${vocabOk ? 'good' : 'mid'}">Từ vựng: ${vocabOk
+            ? `đã dùng từ mới của bài ✓ ${vocabChips(fromLesson.length ? fromLesson : hitTargets)}`
+            : `chưa dùng từ mới của bài — thử thêm ${step.targets.map(t => `<span class="zh">${esc(t.p)}</span>`).join(' hoặc ')}`}</div>
+          ${!longEnough ? '<div class="result mid">Câu hơi ngắn — thử nói thành câu đầy đủ hơn (ít nhất 5 chữ).</div>' : ''}
+          ${found.length ? `<p class="small muted" style="margin:6px 0 2px">Các từ đã học có trong câu (${found.length}):</p><div>${vocabChips(found)}</div>` : ''}` : ''}
+        <p class="small muted" style="margin:10px 0 2px">Câu gợi ý:</p>
         <div class="mid-zh">${esc(it.sample)}</div>
         <div class="row">${sayBtn(it.sample, '🔊 Nghe')}${slowBtn(it.sample)}</div>`;
       if (shown) return;
       shown = true;
       $('#show', box).classList.add('hidden');
-      $('#gr', box).appendChild(gradeButtons(done, said ? (ok ? 2 : 0) : undefined));
+      const score = (ok ? 1 : 0) + (vocabOk ? 1 : 0) + (longEnough ? 0 : -1);
+      $('#gr', box).appendChild(gradeButtons(done, said ? (score >= 2 ? 2 : score === 1 ? 1 : 0) : undefined));
     };
     $('#ab', box).appendChild(answerBox(said => reveal(said)));
     $('#show', box).onclick = () => reveal('');
@@ -630,10 +734,8 @@ const RENDER = {
     box.innerHTML = `<div class="body">
       <p class="muted small">Ngữ pháp mới</p>
       <h2 style="margin-top:0">${esc(g.name)}</h2>
-      <div class="pattern">${esc(g.pattern)}</div>
-      <p>${esc(g.explain)}</p>
-      ${g.examples.map(x => `<div class="sent row between"><span class="zh" style="font-size:1.2rem">${esc(x)}</span>${sayBtn(x)}</div>`).join('')}
-      <p class="tip">Bấm nghe và đọc to từng ví dụ.</p>
+      ${grammarHtml(g)}
+      <p class="tip" style="margin-top:10px">Bấm 🔊 nghe và đọc to từng ví dụ.</p>
     </div>
     <button class="btn primary big" id="ok">Đã hiểu, tiếp tục</button>`;
     $('#ok', box).onclick = () => done(null);
@@ -746,10 +848,13 @@ function pageLesson(id, tab = 'words') {
           <div class="row" style="margin-top:8px">${cs.map(c => `<span class="rad-char" title="${esc(CH[c][2])}"><span class="zh">${esc(c)}</span><small>${esc(CH[c][1])}</small></span>`).join('')}</div></div>`;
       }).join('');
   }
-  if (tab === 'grammar') content = L.grammar.map(g => `
-    <div class="sent"><h3>${esc(g.name)}</h3><div class="pattern">${esc(g.pattern)}</div><p>${esc(g.explain)}</p>
-    ${g.examples.map(x => `<div class="row between"><span class="zh" style="font-size:1.15rem">${esc(x)}</span>${sayBtn(x)}</div>`).join('')}
-    <p class="small muted" style="margin-top:8px">Bài đặt câu: ${g.tasks.map(t => esc(t.vi)).join(' · ')}</p></div>`).join('');
+  if (tab === 'grammar') {
+    const block = g => `<div class="gblock"><h3>${esc(g.name)}</h3>${grammarHtml(g)}
+      ${g.tasks.length ? `<p class="small muted" style="margin-top:8px">Bài đặt câu: ${g.tasks.map(t => esc(t.vi)).join(' · ')}</p>` : ''}</div>`;
+    const book = L.grammar.filter(g => !g.extra), extra = L.grammar.filter(g => g.extra);
+    content = `<div class="small muted" style="margin-bottom:6px">Theo giáo trình (注释)</div>${book.map(block).join('')}
+      ${extra.length ? `<h2 style="margin-top:22px">Mở rộng ngoài sách</h2><p class="small muted">Những điểm hay dùng trong giao tiếp, giúp nói tự nhiên hơn và chuẩn bị cho HSK 4.</p>${extra.map(block).join('')}` : ''}`;
+  }
   if (tab === 'sent') content = BY_LESSON[id].filter(i => i.type === 'sent').map(it => `
     <div class="sent"><div class="row between" style="flex-wrap:nowrap"><span class="zh">${esc(it.zh)}</span><span style="flex:none">${sayBtn(it.zh)}${slowBtn(it.zh)}</span></div>
     <div class="py-line">${esc(it.py)}</div><div class="vi-line">${esc(it.vi)}</div></div>`).join('');
@@ -973,6 +1078,10 @@ function pageSettings() {
       <label class="field"><span>Tốc độ đọc mẫu: <b id="rv">${settings.rate}</b></span>
         <div class="row" style="flex-wrap:nowrap"><input type="range" id="rate" min="0.5" max="1.2" step="0.05" value="${settings.rate}" style="flex:1">
         <button class="btn icon" id="testrate">🔊</button></div></label>
+      <label class="field"><span>Thời gian phản xạ nói (Việt → Trung)</span>
+        <div class="seg" id="reflex" style="flex-wrap:wrap">${[['auto', 'Tự động'], [10, '10s'], [15, '15s'], [20, '20s'], [30, '30s'], [45, '45s'], [0, 'Tắt']]
+          .map(([v, t]) => `<button data-v="${v}" class="${settings.reflex === v ? 'on' : ''}">${t}</button>`).join('')}</div>
+        <span class="small muted" style="margin-top:4px">Tự động: 12–30 giây tùy độ dài câu. Có thể đổi nhanh bằng nút ⏱ ngay trên thẻ luyện nói.</span></label>
       <label class="row"><input type="checkbox" id="py" ${settings.pinyin ? 'checked' : ''}> Hiện pinyin khi nghe & nhắc lại câu</label>
     </div>
     <div class="card">
@@ -993,6 +1102,9 @@ function pageSettings() {
   $('#rate').oninput = e => { settings.rate = +e.target.value; $('#rv').textContent = settings.rate; saveSettings(); };
   $('#testrate').onclick = () => say('我每天都练习说汉语。');
   $('#py').onchange = e => { settings.pinyin = e.target.checked; saveSettings(); };
+  $$('#reflex button').forEach(b => b.onclick = () => {
+    settings.reflex = b.dataset.v === 'auto' ? 'auto' : +b.dataset.v; saveSettings(); pageSettings();
+  });
   $('#exp').onclick = () => {
     const d = new Date();
     download(`hsk3-saoluu-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}.json`,

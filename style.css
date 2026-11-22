@@ -15,7 +15,8 @@
   --bad-soft: #fbe9ea;
   --radius: 14px;
   --shadow: 0 1px 2px rgba(0,0,0,.05), 0 4px 14px rgba(0,0,0,.04);
-  --zh: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", "Noto Sans CJK SC", sans-serif;
+  /* Font Latin/Việt đứng trước để dấu tiếng Việt hiển thị đúng; chữ Hán tự rơi xuống font Trung phía sau */
+  --zh: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", "Noto Sans CJK SC", sans-serif;
   --ui: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 @media (prefers-color-scheme: dark) {
@@ -228,6 +229,17 @@ label.field > span { display: block; font-size: .9rem; color: var(--muted); marg
 .rad-char { display: inline-flex; flex-direction: column; align-items: center; background: var(--surface-2); border-radius: 10px; padding: 4px 10px; }
 .rad-char .zh { font-size: 1.5rem; }
 .rad-char small { font-size: .7rem; color: var(--muted); text-transform: uppercase; }
+.badge { display: inline-block; font-size: .72rem; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--warn-soft); color: var(--warn); margin-bottom: 4px; }
+.gform { display: grid; gap: 6px; margin: 8px 0; }
+.gform > div { display: grid; grid-template-columns: minmax(90px, 30%) 1fr; gap: 10px; background: var(--surface-2); border-radius: 8px; padding: 6px 10px; font-size: .92rem; }
+.gform b { font-weight: 600; color: var(--muted); }
+.gblock { padding: 12px 0 16px; border-bottom: 1px solid var(--line); }
+.gblock:last-child { border-bottom: 0; }
+.tip ul { margin: 6px 0 0; padding-left: 18px; }
+.tip li + li { margin-top: 4px; }
+.vchip { display: inline-flex; align-items: baseline; gap: 4px; padding: 3px 10px; margin: 2px 2px 2px 0; border-radius: 999px; background: var(--surface-2); color: var(--text); font-size: .9rem; font-weight: 500; }
+.vchip .zh { font-size: 1.05rem; }
+.vchip small { color: var(--muted); font-weight: 400; }
 mark { background: var(--warn-soft); color: var(--warn); border-radius: 4px; padding: 0 2px; }
 details summary { cursor: pointer; padding: 4px 0; }
 .mode-card { cursor: pointer; text-align: left; width: 100%; color: inherit; font: inherit; }
